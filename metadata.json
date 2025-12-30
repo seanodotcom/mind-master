@@ -1,0 +1,5 @@
+{
+  "name": "MindMaster Canvas",
+  "description": "A high-fidelity Mastermind clone built with Canvas API. Features 1-player AI modes with animations, 2-player pass-and-play, and intelligent hints powered by Gemini.",
+  "requestFramePermissions": []
+}
