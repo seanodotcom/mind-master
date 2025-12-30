@@ -48,8 +48,25 @@ const App: React.FC = () => {
   }, []);
 
   const saveStats = (newStats: GameStats) => {
-    setStats(newStats);
     localStorage.setItem('mindmaster-stats', JSON.stringify(newStats));
+  };
+
+  const updateStats = (isWin: boolean) => {
+    setStats(prev => {
+      const newStats = { ...prev };
+      if (isWin) {
+        newStats.wins += 1;
+        newStats.streak += 1;
+        if (newStats.streak > newStats.bestStreak) {
+          newStats.bestStreak = newStats.streak;
+        }
+      } else {
+        newStats.losses += 1;
+        newStats.streak = 0;
+      }
+      saveStats(newStats);
+      return newStats;
+    });
   };
 
   const initGame = () => {
@@ -64,13 +81,17 @@ const App: React.FC = () => {
 
   const start1P = () => {
     initGame();
+    // Ensure secret is empty initially to not reveal anything before shuffle
+    setSecret(Array(CODE_LENGTH).fill(PegColor.EMPTY)); 
+    
     // HIDE MENU IMMEDIATELY so user can see board/shuffle
     setMode(GameMode.PLAYING);
-    setIsAnimating(false);
+    // Lock interactions immediately
+    setIsAnimating(true);
 
     // Delay before shuffling starts (400ms)
     shuffleTimeoutRef.current = setTimeout(() => {
-        setIsAnimating(true); // Start shuffle animation
+        // Note: isAnimating is already true, keeping UI locked
         
         let shuffles = 0;
         shuffleIntervalRef.current = setInterval(() => {
@@ -78,7 +99,7 @@ const App: React.FC = () => {
           shuffles++;
           if (shuffles > 20) {
             if (shuffleIntervalRef.current) clearInterval(shuffleIntervalRef.current);
-            setIsAnimating(false);
+            setIsAnimating(false); // Unlock interactions
             soundService.playReady();
           }
         }, 80);
@@ -98,17 +119,21 @@ const App: React.FC = () => {
         return;
       }
     }
-    initGame(); // Clear timers
+    // Only reset state here to prevent double-init issues, 
+    // real init happens in start1P/start2P or here if just going to menu
     setMode(GameMode.MENU);
   };
 
   const handlePaletteClick = (color: PegColor) => {
+    if (isAnimating) return; // Lock input during animation
+    
     if (mode === GameMode.PLAYING) {
       const currentPegs = [...rows[currentRow].pegs];
       const nextEmpty = currentPegs.indexOf(PegColor.EMPTY);
       
       if (nextEmpty !== -1) {
-        const newRows = [...rows];
+        // Deep copy needed for safety, though 1 level is enough here
+        const newRows = rows.map((r, i) => i === currentRow ? { ...r, pegs: [...r.pegs] } : r);
         newRows[currentRow].pegs[nextEmpty] = color;
         setRows(newRows);
         soundService.playPop();
@@ -129,12 +154,21 @@ const App: React.FC = () => {
   };
 
   const handlePegClick = (rowIndex: number, colIndex: number) => {
+    if (isAnimating) return; // Lock input during animation
+
     if (mode === GameMode.PLAYING) {
       if (rowIndex !== currentRow) return;
       
       if (rows[rowIndex].pegs[colIndex] !== PegColor.EMPTY) {
-        const newRows = [...rows];
-        newRows[rowIndex].pegs[colIndex] = PegColor.EMPTY;
+        // Use immutable update pattern to ensure React/Effects detect change
+        const newRows = rows.map((row, rIdx) => {
+          if (rIdx === rowIndex) {
+            const newPegs = [...row.pegs];
+            newPegs[colIndex] = PegColor.EMPTY;
+            return { ...row, pegs: newPegs };
+          }
+          return row;
+        });
         setRows(newRows);
         soundService.playPop();
       }
@@ -150,22 +184,9 @@ const App: React.FC = () => {
     }
   };
 
-  const updateStats = (isWin: boolean) => {
-    const newStats = { ...stats };
-    if (isWin) {
-      newStats.wins += 1;
-      newStats.streak += 1;
-      if (newStats.streak > newStats.bestStreak) {
-        newStats.bestStreak = newStats.streak;
-      }
-    } else {
-      newStats.losses += 1;
-      newStats.streak = 0;
-    }
-    saveStats(newStats);
-  };
-
   const submitGuess = () => {
+    if (isAnimating) return; 
+
     const currentPegs = rows[currentRow].pegs;
     if (currentPegs.includes(PegColor.EMPTY)) {
       soundService.playError();
@@ -221,7 +242,7 @@ const App: React.FC = () => {
   };
 
   const getHint = async () => {
-    if (loadingHint || mode !== GameMode.PLAYING) return;
+    if (loadingHint || mode !== GameMode.PLAYING || isAnimating) return;
     setLoadingHint(true);
     const hintText = await getGeminiHint(secret, rows, currentRow);
     setHint(hintText);
@@ -240,7 +261,7 @@ const App: React.FC = () => {
         MIND MASTER
       </h1>
 
-      <div className="flex flex-col md:flex-row gap-8 items-start">
+      <div className="flex flex-col md:flex-row gap-8 items-center">
         
         {/* Main Canvas Area */}
         <div className="relative">
@@ -310,8 +331,12 @@ const App: React.FC = () => {
                 <button
                   key={color}
                   onClick={() => handlePaletteClick(color)}
-                  className={`w-12 h-12 rounded-full shadow-inner transform transition-transform hover:scale-105 active:scale-95`}
-                  style={{ backgroundColor: color }}
+                  disabled={isAnimating}
+                  className={`w-12 h-12 rounded-full shadow-lg transform transition-transform hover:scale-105 active:scale-95 border-2 border-transparent hover:border-white/20 ${isAnimating ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  style={{ 
+                    backgroundColor: color,
+                    filter: 'brightness(0.85)' // Match 3D lighting
+                  }}
                   aria-label="Select color"
                 />
               ))}
@@ -324,9 +349,9 @@ const App: React.FC = () => {
               <>
                 <button 
                   onClick={submitGuess}
-                  disabled={!isRowFull}
+                  disabled={!isRowFull || isAnimating}
                   className={`w-full font-bold py-3 rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2 ${
-                    isRowFull 
+                    isRowFull && !isAnimating
                       ? "bg-green-600 hover:bg-green-500 text-white" 
                       : "bg-gray-700 text-gray-500 cursor-not-allowed opacity-50"
                   }`}
@@ -336,10 +361,10 @@ const App: React.FC = () => {
 
                 <button 
                   onClick={getHint}
-                  disabled={loadingHint || !!hint || !canAskHint}
+                  disabled={loadingHint || !!hint || !canAskHint || isAnimating}
                   title={!canAskHint ? "Available after 4 guesses" : ""}
                   className={`w-full font-bold py-3 rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2 ${
-                    (!loadingHint && !hint && canAskHint)
+                    (!loadingHint && !hint && canAskHint && !isAnimating)
                       ? "bg-indigo-600 hover:bg-indigo-500 text-white"
                       : "bg-gray-700 text-gray-500 cursor-not-allowed opacity-50"
                   }`}
