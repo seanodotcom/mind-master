@@ -46,6 +46,7 @@ const MastermindCanvas: React.FC<Props> = ({
     const secretGroupRef = useRef<THREE.Group | null>(null);
     const arrowRef = useRef<THREE.Mesh | null>(null);
     const raycaster = useRef(new THREE.Raycaster());
+    const deviceTilt = useRef({ x: 0, y: 0 });
     const animationId = useRef<number>(0);
     const fireworksRef = useRef<any[]>([]); // Store active fireworks
 
@@ -77,6 +78,39 @@ const MastermindCanvas: React.FC<Props> = ({
         isMobileRef.current = isMobile;
         isAnimatingRef.current = isAnimating;
     }, [currentRow, mode, gameWon, isMobile, isAnimating]);
+
+    // Handle Device Orientation (Mobile Tilt)
+    useEffect(() => {
+        const handleOrientation = (event: DeviceOrientationEvent) => {
+            const { beta, gamma } = event;
+            if (beta === null || gamma === null) return;
+
+            // Beta: Front-back tilt [-180, 180]
+            // Gamma: Left-right tilt [-90, 90]
+
+            // Clamp and normalize
+            // Assume holding phone at 45deg is "neutral". 
+            // Tilting "flat" (0deg) -> Look at top (Positive X rot)
+            // Tilting "upright" (90deg) -> Look at bottom (Negative X rot)
+            const clampedBeta = Math.min(Math.max(beta, 0), 90);
+            // Inverse: 0 -> +1, 90 -> -1
+            const x = -((clampedBeta - 45) / 45);
+
+            // Gamma: Tilt Right (+) -> Right side away (Negative Y rot)
+            const clampedGamma = Math.min(Math.max(gamma, -45), 45);
+            const y = -(clampedGamma / 45);
+
+            deviceTilt.current = { x, y };
+        };
+
+        if (isMobile) {
+            window.addEventListener('deviceorientation', handleOrientation);
+        }
+
+        return () => {
+            window.removeEventListener('deviceorientation', handleOrientation);
+        };
+    }, [isMobile]);
 
     // Handle Device Orientation (Mobile Tilt)
 
@@ -376,9 +410,16 @@ const MastermindCanvas: React.FC<Props> = ({
                 cameraRef.current.lookAt(0, cameraRef.current.position.y, 0);
 
                 if (boardGroupRef.current) {
-                    // Tilt removed - keep static rotation if needed or let it be 0
-                    boardGroupRef.current.rotation.x = 0;
-                    boardGroupRef.current.rotation.y = 0;
+                    let targetRotX = 0;
+                    let targetRotY = 0;
+
+                    if (isMobileRef.current) {
+                        targetRotX = deviceTilt.current.x * 0.4;
+                        targetRotY = deviceTilt.current.y * 0.4;
+                    }
+
+                    boardGroupRef.current.rotation.x += (targetRotX - boardGroupRef.current.rotation.x) * 0.1;
+                    boardGroupRef.current.rotation.y += (targetRotY - boardGroupRef.current.rotation.y) * 0.1;
                 }
 
                 if (arrowRef.current) {

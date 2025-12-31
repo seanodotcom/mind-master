@@ -5,6 +5,7 @@ import { COLORS, BOARD_ROWS, CODE_LENGTH } from './constants';
 import { calculateFeedback, generateSecret } from './services/gameLogic';
 import { soundService } from './services/sound';
 import { getGeminiHint } from './services/gemini';
+import { requestDeviceOrientationPermission } from './services/device';
 
 import { RotateCcw, Play, Users, Bot, Sparkles, Volume2, Trophy, Flame, Menu, X, Check, AlertTriangle } from 'lucide-react';
 
@@ -125,7 +126,10 @@ const App = () => {
   };
 
   const start1P = async () => {
-
+    // Request permission for device orientation (needed for iOS 13+)
+    if (isMobile) {
+      await requestDeviceOrientationPermission();
+    }
     initGame();
     setSecret(Array(CODE_LENGTH).fill(PegColor.EMPTY));
     setMode(GameMode.PLAYING);
@@ -151,7 +155,10 @@ const App = () => {
   };
 
   const start2P = async () => {
-
+    // Request permission for device orientation (needed for iOS 13+)
+    if (isMobile) {
+      await requestDeviceOrientationPermission();
+    }
     initGame();
     setSecret(Array(CODE_LENGTH).fill(PegColor.EMPTY));
     setMode(GameMode.SETUP_2P);
