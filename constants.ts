@@ -12,7 +12,7 @@ export const COLORS = [
 export const BOARD_ROWS = 10;
 export const CODE_LENGTH = 4;
 
-export const CANVAS_WIDTH = 400;
+export const CANVAS_WIDTH = 350; // Reduced to fit standard mobile screens
 export const CANVAS_HEIGHT = 650;
 
 // Canvas Layout

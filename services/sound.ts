@@ -8,7 +8,7 @@ class SoundService {
     return this.ctx;
   }
 
-  playTone(freq: number, type: OscillatorType, duration: number) {
+  playTone(freq: number, type: OscillatorType, duration: number, vol = 0.1) {
     const ctx = this.getContext();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -16,7 +16,7 @@ class SoundService {
     osc.type = type;
     osc.frequency.setValueAtTime(freq, ctx.currentTime);
     
-    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    gain.gain.setValueAtTime(vol, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
 
     osc.connect(gain);
@@ -32,6 +32,11 @@ class SoundService {
 
   playError() {
     this.playTone(150, 'sawtooth', 0.3);
+  }
+
+  playShuffle() {
+    // Short, mechanical tick sound
+    this.playTone(800 + Math.random() * 200, 'square', 0.05, 0.05);
   }
 
   playSuccess() {
