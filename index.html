@@ -22,6 +22,22 @@
       background-color: #111827;
       color: white;
     }
+
+    @keyframes descend {
+      0% {
+        transform: translateY(-150%);
+        opacity: 0;
+      }
+
+      100% {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    .animate-descend {
+      animation: descend 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
   </style>
   <script type="module" src="./index.tsx"></script>
 </head>

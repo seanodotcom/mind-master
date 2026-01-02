@@ -61,6 +61,8 @@ const App = () => {
   // Mobile Layout State
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  // Detect Touch Device for Tilt/Controls
+  const [isTouch, setIsTouch] = useState(('ontouchstart' in window) || (navigator.maxTouchPoints > 0));
 
   const shuffleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shuffleIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -127,8 +129,8 @@ const App = () => {
 
   const start1P = async () => {
     // Request permission for device orientation (needed for iOS 13+)
-    if (isMobile) {
-      await requestDeviceOrientationPermission();
+    if (isTouch) {
+      const granted = await requestDeviceOrientationPermission();
     }
     initGame();
     setSecret(Array(CODE_LENGTH).fill(PegColor.EMPTY));
@@ -156,7 +158,7 @@ const App = () => {
 
   const start2P = async () => {
     // Request permission for device orientation (needed for iOS 13+)
-    if (isMobile) {
+    if (isTouch) {
       await requestDeviceOrientationPermission();
     }
     initGame();
@@ -324,7 +326,6 @@ const App = () => {
         {/* Header */}
         <header className="h-12 flex items-center justify-between px-4 bg-gray-900 border-b border-gray-800 shrink-0 z-20 shadow-md">
           <div className="flex items-center gap-2">
-            <img src="logo.png" alt="MIND MASTER" className="w-8 h-8 object-contain" />
             <div className="text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600">
               MIND MASTER
             </div>
@@ -353,15 +354,17 @@ const App = () => {
             isAnimating={isAnimating}
             isShuffling={isShuffling}
             gameWon={gameWon}
-            isMobile={true}
+            isMobile={isMobile}
+            isTouch={isTouch}
           />
 
           {/* In-Game Menu Overlay */}
           {mode === GameMode.MENU && (
             <div className="absolute inset-0 bg-gray-900/95 z-40 flex flex-col items-center justify-center p-6 gap-4 overflow-y-auto">
-              <h2 className="text-3xl font-bold text-white mb-2">New Game</h2>
 
-              <div className="flex gap-2 w-full">
+              <img src="logo.png" alt="MIND MASTER" className="w-48 object-contain mb-4 animate-in slide-in-from-top-8 fade-in duration-700" />
+
+              <div className="flex gap-2 w-full mt-8">
                 <button onClick={start1P} className="flex-1 bg-blue-600 py-2 rounded-lg text-white font-bold flex flex-col items-center justify-center gap-1 shadow-lg active:scale-95 transition-transform">
                   <Bot size={20} /> <span>1 Player</span>
                 </button>
@@ -491,7 +494,6 @@ const App = () => {
   return (
     <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-start md:justify-center p-4 pb-20 overflow-x-hidden">
       <div className="flex flex-row items-center justify-center gap-4 mb-6">
-        <img src="logo.png" alt="Mind Master Logo" className="w-16 h-16 object-contain animate-in fade-in zoom-in duration-500" />
         <h1 className="text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600 tracking-tight flex-shrink-0">
           MIND MASTER
         </h1>
@@ -513,6 +515,7 @@ const App = () => {
           />
           {mode === GameMode.MENU && (
             <div className="absolute inset-0 bg-gray-900/90 flex flex-col items-center justify-center gap-6 p-6 z-10">
+              <img src="logo.png" alt="MIND MASTER" className="w-56 object-contain mb-2 animate-in slide-in-from-top-8 fade-in duration-700" />
               <button onClick={start1P} className="w-full max-w-xs flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-2 py-2 rounded-lg font-bold text-base transition-all transform hover:scale-105 shadow-lg shadow-blue-500/30">
                 <Bot size={20} /> 1 Player
               </button>

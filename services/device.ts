@@ -1,5 +1,5 @@
 export const requestDeviceOrientationPermission = async (): Promise<boolean> => {
-    if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
         try {
             const permissionState = await (DeviceOrientationEvent as any).requestPermission();
             return permissionState === 'granted';

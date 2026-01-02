@@ -16,6 +16,7 @@ interface Props {
     isShuffling: boolean; // NEW PROP
     gameWon: boolean;
     isMobile: boolean;
+    isTouch: boolean;
 }
 
 // 3D Layout Constants
@@ -33,7 +34,7 @@ const SECRET_Y = 9;
 const CONTENT_X_OFFSET = -1.0;
 
 const MastermindCanvas: React.FC<Props> = ({
-    mode, rows, currentRow, onPegClick, secret, showSecret, isAnimating, isShuffling, gameWon, isMobile
+    mode, rows, currentRow, onPegClick, secret, showSecret, isAnimating, isShuffling, gameWon, isMobile, isTouch
 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -46,7 +47,9 @@ const MastermindCanvas: React.FC<Props> = ({
     const secretGroupRef = useRef<THREE.Group | null>(null);
     const arrowRef = useRef<THREE.Mesh | null>(null);
     const raycaster = useRef(new THREE.Raycaster());
+    const mouse = useRef(new THREE.Vector2());
     const deviceTilt = useRef({ x: 0, y: 0 });
+    const hasOrientation = useRef(false);
     const animationId = useRef<number>(0);
     const fireworksRef = useRef<any[]>([]); // Store active fireworks
 
@@ -79,40 +82,33 @@ const MastermindCanvas: React.FC<Props> = ({
         isAnimatingRef.current = isAnimating;
     }, [currentRow, mode, gameWon, isMobile, isAnimating]);
 
-    // Handle Device Orientation (Mobile Tilt)
     useEffect(() => {
         const handleOrientation = (event: DeviceOrientationEvent) => {
             const { beta, gamma } = event;
             if (beta === null || gamma === null) return;
-
-            // Beta: Front-back tilt [-180, 180]
-            // Gamma: Left-right tilt [-90, 90]
-
-            // Clamp and normalize
-            // Assume holding phone at 45deg is "neutral". 
-            // Tilting "flat" (0deg) -> Look at top (Positive X rot)
-            // Tilting "upright" (90deg) -> Look at bottom (Negative X rot)
-            const clampedBeta = Math.min(Math.max(beta, 0), 90);
-            // Inverse: 0 -> +1, 90 -> -1
-            const x = -((clampedBeta - 45) / 45);
-
-            // Gamma: Tilt Right (+) -> Right side away (Negative Y rot)
-            const clampedGamma = Math.min(Math.max(gamma, -45), 45);
-            const y = -(clampedGamma / 45);
-
+            hasOrientation.current = true;
+            const x = -((Math.min(Math.max(beta, 0), 90) - 45) / 45);
+            const y = -(Math.min(Math.max(gamma, -45), 45) / 45);
             deviceTilt.current = { x, y };
         };
 
-        if (isMobile) {
-            window.addEventListener('deviceorientation', handleOrientation);
-        }
+        const handleMouseMove = (e: MouseEvent) => {
+            if (!containerRef.current) return;
+            const rect = containerRef.current.getBoundingClientRect();
+            mouse.current.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.current.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+        };
+
+        window.addEventListener('deviceorientation', handleOrientation);
+        window.addEventListener('mousemove', handleMouseMove);
 
         return () => {
             window.removeEventListener('deviceorientation', handleOrientation);
+            window.removeEventListener('mousemove', handleMouseMove);
         };
-    }, [isMobile]);
+    }, []);
 
-    // Handle Device Orientation (Mobile Tilt)
+
 
 
     // Auto-stop fireworks after 4 seconds
@@ -413,9 +409,12 @@ const MastermindCanvas: React.FC<Props> = ({
                     let targetRotX = 0;
                     let targetRotY = 0;
 
-                    if (isMobileRef.current) {
+                    if (hasOrientation.current) {
                         targetRotX = deviceTilt.current.x * 0.4;
                         targetRotY = deviceTilt.current.y * 0.4;
+                    } else {
+                        targetRotX = mouse.current.y * 0.2;
+                        targetRotY = mouse.current.x * 0.2;
                     }
 
                     boardGroupRef.current.rotation.x += (targetRotX - boardGroupRef.current.rotation.x) * 0.1;
@@ -645,7 +644,9 @@ const MastermindCanvas: React.FC<Props> = ({
         const secretY = SECRET_Y;
         const startX = -((CODE_LENGTH - 1) * COL_SPACING) / 2 + CONTENT_X_OFFSET;
 
-        if (showSecret || mode === GameMode.GAME_OVER || isShuffling) {
+        if (mode === GameMode.MENU) {
+            // Do not render anything in secret group for menu
+        } else if (showSecret || mode === GameMode.GAME_OVER || isShuffling) {
             secret.forEach((color, i) => {
                 if ((color as any) === PegColor.EMPTY) return;
                 const geo = new THREE.SphereGeometry(PEG_RADIUS, 32, 32);
