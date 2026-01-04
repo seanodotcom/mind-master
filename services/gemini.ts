@@ -1,19 +1,25 @@
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { PegColor, RowData } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const apiKey = process.env.API_KEY;
+const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 export const getGeminiHint = async (
   secret: PegColor[],
   history: RowData[],
   currentRow: number
 ): Promise<string> => {
+  if (!ai) {
+    console.warn("Gemini API Key is missing. AI hints are disabled.");
+    return "I need an API Key to think! Check your .env setup.";
+  }
+
   try {
-    const model = 'gemini-3-flash-preview';
-    
+    const model = 'gemini-2.0-flash-exp';
+
     // Construct a textual representation of the board state
     const colorMap = (c: PegColor) => {
-      switch(c) {
+      switch (c) {
         case PegColor.RED: return 'Red';
         case PegColor.GREEN: return 'Green';
         case PegColor.BLUE: return 'Blue';
