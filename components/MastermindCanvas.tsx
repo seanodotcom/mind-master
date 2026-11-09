@@ -1,7 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import {
-    CANVAS_WIDTH, CANVAS_HEIGHT, COLORS, BOARD_ROWS, CODE_LENGTH
+    BOARD_ROWS, CODE_LENGTH
 } from '../constants';
 import { PegColor, RowData, GameMode } from '../types';
 
@@ -13,10 +13,10 @@ interface Props {
     secret: PegColor[];
     showSecret: boolean;
     isAnimating: boolean;
-    isShuffling: boolean; // NEW PROP
+    isShuffling: boolean;
     gameWon: boolean;
     isMobile: boolean;
-    isTouch: boolean;
+    isTouch?: boolean;
 }
 
 // 3D Layout Constants
@@ -30,11 +30,10 @@ const ROW_START_Y = -8; // Bottom row Y
 const SECRET_Y = 9;
 
 // Offset to visually center the pegs+feedback within the board
-// Adjusted from -1.65 to -1.0 to better center the content (Pegs + Arrow + Feedback)
 const CONTENT_X_OFFSET = -1.0;
 
 const MastermindCanvas: React.FC<Props> = ({
-    mode, rows, currentRow, onPegClick, secret, showSecret, isAnimating, isShuffling, gameWon, isMobile, isTouch
+    mode, rows, currentRow, onPegClick, secret, showSecret, isAnimating, isShuffling, gameWon, isMobile
 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -52,6 +51,26 @@ const MastermindCanvas: React.FC<Props> = ({
     const hasOrientation = useRef(false);
     const animationId = useRef<number>(0);
     const fireworksRef = useRef<any[]>([]); // Store active fireworks
+
+    // Shared Geometries to avoid allocating hundreds of geometries during shuffling / game play
+    const pegGeo = useRef(new THREE.SphereGeometry(PEG_RADIUS, 32, 32));
+    const fbGeo = useRef(new THREE.SphereGeometry(0.25, 16, 16));
+
+    // Helper to safely dispose materials and non-shared geometries
+    const disposeObject = (obj: THREE.Object3D, disposeGeometry = false) => {
+        obj.traverse((child: any) => {
+            if (disposeGeometry && child.geometry) {
+                child.geometry.dispose();
+            }
+            if (child.material) {
+                if (Array.isArray(child.material)) {
+                    child.material.forEach((m: any) => m.dispose());
+                } else {
+                    child.material.dispose();
+                }
+            }
+        });
+    };
 
 
     // State tracking for diffing
@@ -468,7 +487,7 @@ const MastermindCanvas: React.FC<Props> = ({
                             child.userData.velocity += 0.05;
                             if (child.position.y > 30) {
                                 group.remove(child);
-                                if (child.geometry) child.geometry.dispose();
+                                disposeObject(child, false);
                             }
                         }
                     }
@@ -493,6 +512,7 @@ const MastermindCanvas: React.FC<Props> = ({
                     if (fw.life <= 0) {
                         sceneRef.current?.remove(fw.mesh);
                         fw.mesh.geometry.dispose();
+                        if (fw.mesh.material) fw.mesh.material.dispose();
                         fireworksRef.current.splice(idx, 1);
                     }
                 });
@@ -513,6 +533,39 @@ const MastermindCanvas: React.FC<Props> = ({
                 }
             }
             cancelAnimationFrame(animationId.current);
+
+            // Clean up active fireworks
+            fireworksRef.current.forEach(fw => {
+                if (fw.mesh) {
+                    scene.remove(fw.mesh);
+                    fw.mesh.geometry?.dispose();
+                    fw.mesh.material?.dispose();
+                }
+            });
+            fireworksRef.current = [];
+
+            // Traverse and dispose all scene objects
+            scene.traverse((obj: any) => {
+                if (obj.geometry && obj.geometry !== pegGeo.current && obj.geometry !== fbGeo.current) {
+                    obj.geometry.dispose();
+                }
+                if (obj.material) {
+                    if (Array.isArray(obj.material)) {
+                        obj.material.forEach((m: any) => m.dispose());
+                    } else {
+                        obj.material.dispose();
+                    }
+                }
+            });
+
+            if (questionTexture.current) {
+                questionTexture.current.dispose();
+                questionTexture.current = null;
+            }
+
+            pegGeo.current.dispose();
+            fbGeo.current.dispose();
+
             renderer.dispose();
         };
     }, []);
@@ -526,9 +579,7 @@ const MastermindCanvas: React.FC<Props> = ({
             group: THREE.Group,
             data: PegColor[],
             rowIndex: number,
-            yPos: number,
-            prevData: PegColor[],
-            isSecret = false
+            yPos: number
         ) => {
             const startX = -((CODE_LENGTH - 1) * COL_SPACING) / 2 + CONTENT_X_OFFSET;
 
@@ -554,7 +605,7 @@ const MastermindCanvas: React.FC<Props> = ({
                 }
 
                 if (!pegMesh) {
-                    const geo = new THREE.SphereGeometry(PEG_RADIUS, 32, 32);
+                    const geo = pegGeo.current;
                     const mat = new THREE.MeshPhysicalMaterial({
                         color: new THREE.Color(color),
                         metalness: 0.1,
@@ -586,7 +637,7 @@ const MastermindCanvas: React.FC<Props> = ({
 
         rows.forEach((row, r) => {
             const y = ROW_START_Y + r * ROW_SPACING;
-            syncPegs(pegsGroupRef.current!, row.pegs, r, y, prevRows.current[r]?.pegs || Array(4).fill(PegColor.EMPTY));
+            syncPegs(pegsGroupRef.current!, row.pegs, r, y);
 
             const fbStartX = (-((CODE_LENGTH - 1) * COL_SPACING) / 2) + CONTENT_X_OFFSET + CODE_LENGTH * COL_SPACING + 1.0;
             const fbOffsets = [
@@ -612,9 +663,9 @@ const MastermindCanvas: React.FC<Props> = ({
                     }
 
                     if (!fbMesh) {
-                        const fbGeo = new THREE.SphereGeometry(0.25, 16, 16);
+                        const fbMeshGeo = fbGeo.current;
                         const fbMat = new THREE.MeshStandardMaterial({ color });
-                        fbMesh = new THREE.Mesh(fbGeo, fbMat);
+                        fbMesh = new THREE.Mesh(fbMeshGeo, fbMat);
                         fbMesh.name = fbName;
                         fbMesh.userData = {
                             targetY,
@@ -638,7 +689,9 @@ const MastermindCanvas: React.FC<Props> = ({
         });
 
         while (secretGroupRef.current.children.length > 0) {
-            secretGroupRef.current.remove(secretGroupRef.current.children[0]);
+            const child = secretGroupRef.current.children[0];
+            secretGroupRef.current.remove(child);
+            disposeObject(child, false);
         }
 
         const secretY = SECRET_Y;
@@ -649,7 +702,7 @@ const MastermindCanvas: React.FC<Props> = ({
         } else if (showSecret || mode === GameMode.GAME_OVER || isShuffling) {
             secret.forEach((color, i) => {
                 if ((color as any) === PegColor.EMPTY) return;
-                const geo = new THREE.SphereGeometry(PEG_RADIUS, 32, 32);
+                const geo = pegGeo.current;
                 const mat = new THREE.MeshPhysicalMaterial({
                     color: new THREE.Color(color),
                     metalness: 0.1, roughness: 0.2, clearcoat: 0.5
@@ -662,8 +715,7 @@ const MastermindCanvas: React.FC<Props> = ({
             });
         } else {
             secret.forEach((_, i) => {
-                // CHANGED: Use SphereGeometry to look like a "peg" instead of a box
-                const geo = new THREE.SphereGeometry(PEG_RADIUS, 32, 32);
+                const geo = pegGeo.current;
                 // Dark gray material for the mystery peg
                 const mat = new THREE.MeshStandardMaterial({ color: 0x374151, roughness: 0.5, metalness: 0.1 });
                 const mesh = new THREE.Mesh(geo, mat);

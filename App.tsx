@@ -62,10 +62,33 @@ const App = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   // Detect Touch Device for Tilt/Controls
-  const [isTouch, setIsTouch] = useState(('ontouchstart' in window) || (navigator.maxTouchPoints > 0));
+  const [isTouch] = useState(('ontouchstart' in window) || (navigator.maxTouchPoints > 0));
 
   const shuffleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shuffleIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  const clearAllTimers = () => {
+    timersRef.current.forEach(clearTimeout);
+    timersRef.current = [];
+    if (shuffleTimeoutRef.current) {
+      clearTimeout(shuffleTimeoutRef.current);
+      shuffleTimeoutRef.current = null;
+    }
+    if (shuffleIntervalRef.current) {
+      clearInterval(shuffleIntervalRef.current);
+      shuffleIntervalRef.current = null;
+    }
+  };
+
+  const addTimeout = (callback: () => void, delay: number) => {
+    const timer = setTimeout(() => {
+      timersRef.current = timersRef.current.filter(t => t !== timer);
+      callback();
+    }, delay);
+    timersRef.current.push(timer);
+    return timer;
+  };
 
   // Stats State
   const [stats, setStats] = useState<GameStats>({ wins: 0, losses: 0, streak: 0, bestStreak: 0 });
@@ -88,8 +111,7 @@ const App = () => {
       }
     }
     return () => {
-      if (shuffleTimeoutRef.current) clearTimeout(shuffleTimeoutRef.current);
-      if (shuffleIntervalRef.current) clearInterval(shuffleIntervalRef.current);
+      clearAllTimers();
     };
   }, []);
 
@@ -116,6 +138,7 @@ const App = () => {
   };
 
   const initGame = () => {
+    clearAllTimers();
     setRows(createEmptyBoard());
     setCurrentRow(0);
     setHint("");
@@ -123,14 +146,12 @@ const App = () => {
     setGameWon(false);
     setIsMenuOpen(false);
     setConfirmReset(false);
-    if (shuffleTimeoutRef.current) clearTimeout(shuffleTimeoutRef.current);
-    if (shuffleIntervalRef.current) clearInterval(shuffleIntervalRef.current);
   };
 
   const start1P = async () => {
     // Request permission for device orientation (needed for iOS 13+)
     if (isTouch) {
-      const granted = await requestDeviceOrientationPermission();
+      await requestDeviceOrientationPermission();
     }
     initGame();
     setSecret(Array(CODE_LENGTH).fill(PegColor.EMPTY));
@@ -144,10 +165,13 @@ const App = () => {
         soundService.playShuffle(); // Shuffling Sound
         shuffles++;
         if (shuffles > 20) {
-          if (shuffleIntervalRef.current) clearInterval(shuffleIntervalRef.current);
+          if (shuffleIntervalRef.current) {
+            clearInterval(shuffleIntervalRef.current);
+            shuffleIntervalRef.current = null;
+          }
           setIsShuffling(false);
           // Delay for 400ms before panning down
-          setTimeout(() => {
+          addTimeout(() => {
             setIsAnimating(false);
             soundService.playReady();
           }, 400);
@@ -173,9 +197,8 @@ const App = () => {
       e.stopPropagation();
     }
 
-    // Clear any active animations if user aborts
-    if (shuffleTimeoutRef.current) clearTimeout(shuffleTimeoutRef.current);
-    if (shuffleIntervalRef.current) clearInterval(shuffleIntervalRef.current);
+    // Clear any active animations/timers if user aborts
+    clearAllTimers();
     setIsAnimating(false);
     setIsShuffling(false);
 
@@ -184,7 +207,7 @@ const App = () => {
       if (!confirmReset) {
         setConfirmReset(true);
         // Reset the confirm state after 3 seconds if not clicked again
-        setTimeout(() => setConfirmReset(false), 3000);
+        addTimeout(() => setConfirmReset(false), 3000);
         return;
       }
     }
@@ -254,7 +277,7 @@ const App = () => {
     if (currentPegs.includes(PegColor.EMPTY)) {
       soundService.playError();
       setMessage("Fill all holes first!");
-      setTimeout(() => setMessage(""), 2000);
+      addTimeout(() => setMessage(""), 2000);
       return;
     }
     const feedback = calculateFeedback(secret, currentPegs);
@@ -290,13 +313,13 @@ const App = () => {
       return;
     }
     setMessage("Player 2, LOOK AWAY! Player 1 setting up...");
-    setTimeout(() => {
+    addTimeout(() => {
       setMessage("Player 2: turn around in 3...");
-      setTimeout(() => {
+      addTimeout(() => {
         setMessage("Player 2: turn around in 2...");
-        setTimeout(() => {
+        addTimeout(() => {
           setMessage("Player 2: turn around in 1...");
-          setTimeout(() => {
+          addTimeout(() => {
             soundService.playReady();
             setMode(GameMode.PLAYING);
             setMessage("Break the Code!");
